@@ -1,0 +1,1010 @@
+<!-- =====================================================================
+     MODULE COMPLET FINTRAX AI (VERSION MISE À JOUR) :
+     - Enveloppes physiques (+ revenu / - dépense, création à la volée, suppression sécurisée)
+     - Saisie vocale intelligente en brouillon (Type, Montant, Portefeuille, Libellé)
+     - Justificatifs optionnels (Photos compressées via Canvas + PDF ≤ 1,5 Mo + bouton Retirer)
+     - Garde-fous (brouillon, Effacer, Réessayer, montant > 0, alerte solde négatif)
+     - Correction (Annuler dernière opération, Éditer, Supprimer + recalcul)
+     - Synchronisation tableau de bord + Export/Import JSON complet
+     ===================================================================== -->
+<section id="fintrackSmartSuite" aria-label="Module intelligent FinTrack AI" style="font-family: system-ui, -apple-system, sans-serif; border: 1px solid #cbd5e1; border-radius: 14px; padding: 18px; margin: 18px 0; background: #ffffff; color: #0f172a; box-sizing: border-box;">
+
+  <!-- 1. ENVELOPPES PHYSIQUES, CRÉATION À LA VOLÉE & SUPPRESSION SÉCURISÉE -->
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.05rem;">Enveloppes physiques</h3>
+      <small style="color: #64748b;">Chaque revenu alimente (+) l'enveloppe choisie ; chaque dépense en est déduite (-).</small>
+    </div>
+
+    <!-- Formulaire de création rapide d'une nouvelle enveloppe -->
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <input
+        type="text"
+        id="ftNewEnvName"
+        placeholder="Ex: Poche, Coffre, Carburant..."
+        style="padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem;"
+      />
+      <input
+        type="number"
+        id="ftNewEnvInitial"
+        step="any"
+        value="0"
+        placeholder="Solde initial"
+        style="width: 115px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem;"
+      />
+      <button
+        type="button"
+        id="ftBtnAddEnv"
+        style="padding: 8px 14px; border: none; border-radius: 8px; background: #0f172a; color: #ffffff; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+      >
+        + Créer enveloppe
+      </button>
+    </div>
+  </div>
+
+  <!-- Grille d'affichage en direct des enveloppes, de leurs soldes et de la suppression sécurisée -->
+  <div id="ftEnvelopesCards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 10px; margin-bottom: 16px;"></div>
+
+  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+
+  <!-- 2. BARRE DE CONTRÔLE DU BROUILLON & SAISIE VOCALE -->
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <button
+        type="button"
+        id="ftBtnVoiceStart"
+        style="padding: 8px 13px; border: none; border-radius: 8px; background: #dc2626; color: #ffffff; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+      >
+        🎤 Saisie vocale
+      </button>
+      <button
+        type="button"
+        id="ftBtnVoiceRetry"
+        style="padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #0f172a; cursor: pointer; font-size: 0.88rem;"
+      >
+        ↻ Réessayer
+      </button>
+      <button
+        type="button"
+        id="ftBtnDraftClear"
+        style="padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #0f172a; cursor: pointer; font-size: 0.88rem;"
+      >
+        ✕ Effacer
+      </button>
+    </div>
+
+    <!-- Indicateur visuel de l'état du brouillon (Nouvelle saisie vs Modification) -->
+    <span
+      id="ftDraftBadge"
+      style="font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8;"
+    >
+      Brouillon : Nouvelle opération
+    </span>
+  </div>
+
+  <!-- Zone de retour vocal / statut du brouillon (jamais enregistrée sans clic sur Enregistrer) -->
+  <div
+    id="ftVoiceFeedback"
+    style="font-size: 0.86rem; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 8px; margin-bottom: 12px;"
+  >
+    Aucun enregistrement tant que tu ne cliques pas sur « Enregistrer l'opération ».
+  </div>
+
+  <!-- 3. CHAMPS DU BROUILLON (TYPE, MONTANT, PORTEFEUILLE, ENVELOPPE, LIBELLÉ) -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+    <div>
+      <label for="ftInputType" style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
+        Type d'opération
+      </label>
+      <select id="ftInputType" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; font-size: 0.9rem;">
+        <option value="expense">Dépense (- enveloppe)</option>
+        <option value="income">Revenu (+ enveloppe)</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="ftInputAmount" style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
+        Montant
+      </label>
+      <input
+        type="number"
+        id="ftInputAmount"
+        step="any"
+        min="0"
+        placeholder="Ex: 5000"
+        style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box;"
+      />
+    </div>
+
+    <div>
+      <label for="ftInputWallet" style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
+        Portefeuille (détecté à la voix)
+      </label>
+      <select id="ftInputWallet" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; font-size: 0.9rem;">
+        <option value="Espèces">Espèces</option>
+        <option value="Mobile Money">Mobile Money</option>
+        <option value="Banque">Banque</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="ftInputEnvelope" style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
+        Enveloppe physique
+      </label>
+      <select id="ftInputEnvelope" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; font-size: 0.9rem;"></select>
+    </div>
+
+    <div>
+      <label for="ftInputLabel" style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
+        Libellé / Motif
+      </label>
+      <input
+        type="text"
+        id="ftInputLabel"
+        placeholder="Ex: Transport, Salaire..."
+        style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box;"
+      />
+    </div>
+  </div>
+
+  <!-- 4. JUSTIFICATIF OPTIONNEL (PHOTO COMPRESSÉE OU PDF + RETRAIT INDIVIDUEL) -->
+  <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px dashed #cbd5e1;">
+    <div>
+      <label for="ftInputReceipt" style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
+        Justificatif optionnel (Photo compressée ou PDF ≤ 1,5 Mo)
+      </label>
+      <input
+        type="file"
+        id="ftInputReceipt"
+        accept="image/*,application/pdf"
+        capture="environment"
+        style="font-size: 0.85rem;"
+      />
+    </div>
+    <div id="ftReceiptPreviewBox" style="font-size: 0.84rem; color: #334155;"></div>
+  </div>
+
+  <!-- 5. ZONE DE GARDE-FOUS (ERREURS BLOQUANTES OU ALERTE SOLDE NÉGATIF) -->
+  <div
+    id="ftGuardAlert"
+    role="alert"
+    style="display: none; margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 0.88rem; font-weight: 500;"
+  ></div>
+
+  <!-- 6. BOUTONS DE VALIDATION, ANNULATION DE MODIFICATION ET ANNULATION RAPIDE -->
+  <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px;">
+    <button
+      type="button"
+      id="ftBtnSaveOperation"
+      style="padding: 10px 16px; border: none; border-radius: 8px; background: #16a34a; color: #ffffff; font-weight: 600; cursor: pointer; font-size: 0.92rem;"
+    >
+      Enregistrer l'opération
+    </button>
+
+    <button
+      type="button"
+      id="ftBtnCancelEdit"
+      style="display: none; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; color: #0f172a; cursor: pointer; font-size: 0.9rem;"
+    >
+      Annuler la modification
+    </button>
+
+    <button
+      type="button"
+      id="ftBtnUndoLastOp"
+      style="display: none; padding: 10px 14px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+    >
+      ↶ Annuler la dernière opération
+    </button>
+  </div>
+
+  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+
+  <!-- 7. HISTORIQUE DES OPÉRATIONS (JUSTIFICATIF, ÉDITION, SUPPRESSION) -->
+  <div>
+    <h4 style="margin: 0 0 10px 0; font-size: 0.98rem;">
+      Historique des opérations (modification et suppression avec recalcul automatique)
+    </h4>
+    <div id="ftHistoryList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+  </div>
+</section>
+
+<script>
+(function () {
+  'use strict';
+
+  // --- Clés de stockage local (localStorage) ---
+  const STORAGE_KEYS = {
+    envelopes: 'fintrack_smart_envelopes_v1',
+    operations: 'fintrack_smart_ops_v1',
+    lastEnvelopeId: 'fintrack_last_envelope_id'
+  };
+
+  // --- État de l'application dans le module ---
+  let envelopes = loadJsonArray(STORAGE_KEYS.envelopes);
+  if (envelopes.length === 0) {
+    // Enveloppe par défaut pour éviter toute friction au premier démarrage
+    envelopes = [{ id: 'env-default-portefeuille', name: 'Portefeuille', balance: 0 }];
+  }
+
+  let operations = loadJsonArray(STORAGE_KEYS.operations);
+  let draftAttachment = null;        // { name, type: 'image'|'pdf', data: 'data:...' }
+  let editingOperationId = null;     // ID de l'opération en cours d'édition, ou null
+  let lastCreatedOperationId = null; // ID de la dernière opération ajoutée (pour annulation rapide)
+  let awaitingNegativeConfirm = false; // Passe à true après un premier avertissement de solde négatif
+
+  // --- Références DOM ---
+  const dom = {
+    newEnvName: document.getElementById('ftNewEnvName'),
+    newEnvInitial: document.getElementById('ftNewEnvInitial'),
+    btnAddEnv: document.getElementById('ftBtnAddEnv'),
+    envelopesCards: document.getElementById('ftEnvelopesCards'),
+
+    btnVoiceStart: document.getElementById('ftBtnVoiceStart'),
+    btnVoiceRetry: document.getElementById('ftBtnVoiceRetry'),
+    btnDraftClear: document.getElementById('ftBtnDraftClear'),
+    draftBadge: document.getElementById('ftDraftBadge'),
+    voiceFeedback: document.getElementById('ftVoiceFeedback'),
+
+    inputType: document.getElementById('ftInputType'),
+    inputAmount: document.getElementById('ftInputAmount'),
+    inputWallet: document.getElementById('ftInputWallet'),
+    inputEnvelope: document.getElementById('ftInputEnvelope'),
+    inputLabel: document.getElementById('ftInputLabel'),
+
+    inputReceipt: document.getElementById('ftInputReceipt'),
+    receiptPreviewBox: document.getElementById('ftReceiptPreviewBox'),
+
+    guardAlert: document.getElementById('ftGuardAlert'),
+    btnSaveOperation: document.getElementById('ftBtnSaveOperation'),
+    btnCancelEdit: document.getElementById('ftBtnCancelEdit'),
+    btnUndoLastOp: document.getElementById('ftBtnUndoLastOp'),
+
+    historyList: document.getElementById('ftHistoryList')
+  };
+
+  // --- Utilitaires ---
+  function loadJsonArray(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function escapeHtml(text) {
+    return String(text ?? '').replace(/[&<>"']/g, function (char) {
+      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+      return map[char] || char;
+    });
+  }
+
+  function formatNumber(num) {
+    const n = Number(num) || 0;
+    return n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  }
+
+  // --- Messages de garde-fou ---
+  function showGuardAlert(message, isBlockingError) {
+    dom.guardAlert.style.display = 'block';
+    if (isBlockingError) {
+      dom.guardAlert.style.background = '#fef2f2';
+      dom.guardAlert.style.color = '#991b1b';
+      dom.guardAlert.style.border = '1px solid #fecaca';
+    } else {
+      dom.guardAlert.style.background = '#fffbeb';
+      dom.guardAlert.style.color = '#92400e';
+      dom.guardAlert.style.border = '1px solid #fde68a';
+    }
+    dom.guardAlert.textContent = message;
+  }
+
+  function hideGuardAlert() {
+    dom.guardAlert.style.display = 'none';
+    dom.guardAlert.textContent = '';
+  }
+
+  // --- Sauvegarde locale, rendu & hook de synchronisation ---
+  function persistAndRender() {
+    localStorage.setItem(STORAGE_KEYS.envelopes, JSON.stringify(envelopes));
+    localStorage.setItem(STORAGE_KEYS.operations, JSON.stringify(operations));
+
+    renderEnvelopesCards();
+    renderEnvelopeSelect();
+    renderHistoryList();
+
+    dom.btnUndoLastOp.style.display = lastCreatedOperationId ? 'inline-block' : 'none';
+
+    // Notifie les autres parties de FinTrack AI si le hook est défini
+    if (typeof window.onFinTrackSmartUpdate === 'function') {
+      window.onFinTrackSmartUpdate({
+        envelopes: envelopes.slice(),
+        operations: operations.slice()
+      });
+    }
+  }
+
+  // --- Gestion des enveloppes physiques (création + suppression sécurisée) ---
+  function createEnvelope(name, initialBalance) {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) {
+      showGuardAlert('Veuillez saisir un nom pour la nouvelle enveloppe.', true);
+      return null;
+    }
+
+    const parsedInit = parseFloat(initialBalance);
+    const startBalance = Number.isFinite(parsedInit) ? Number(parsedInit.toFixed(2)) : 0;
+
+    const newEnv = {
+      id: 'env-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      name: cleanName,
+      balance: startBalance
+    };
+
+    envelopes.push(newEnv);
+    localStorage.setItem(STORAGE_KEYS.lastEnvelopeId, newEnv.id);
+    hideGuardAlert();
+    persistAndRender();
+    dom.inputEnvelope.value = newEnv.id;
+    return newEnv;
+  }
+
+  // Suppression sécurisée : interdit si dernière enveloppe ou si des opérations y sont liées
+  window.ftDeleteEnvelope = function (envId) {
+    hideGuardAlert();
+
+    if (envelopes.length <= 1) {
+      showGuardAlert('Suppression impossible : garde au moins une enveloppe active.', true);
+      return;
+    }
+
+    const hasLinkedOperations = operations.some(function (op) {
+      return op.envelopeId === envId;
+    });
+
+    if (hasLinkedOperations) {
+      showGuardAlert(
+        'Suppression impossible : cette enveloppe contient déjà des opérations. Supprime ou déplace d\'abord ses opérations.',
+        true
+      );
+      return;
+    }
+
+    const targetEnv = envelopes.find(function (e) { return e.id === envId; });
+    envelopes = envelopes.filter(function (e) { return e.id !== envId; });
+
+    if (localStorage.getItem(STORAGE_KEYS.lastEnvelopeId) === envId) {
+      localStorage.setItem(STORAGE_KEYS.lastEnvelopeId, envelopes[0].id);
+    }
+
+    if (dom.inputEnvelope.value === envId) {
+      dom.inputEnvelope.value = envelopes[0].id;
+    }
+
+    persistAndRender();
+    dom.voiceFeedback.textContent =
+      'Enveloppe « ' + (targetEnv ? targetEnv.name : '') + ' » supprimée en toute sécurité.';
+  };
+
+  // Applique une variation (+ pour revenu, - pour dépense) à une enveloppe
+  function adjustEnvelopeBalance(envelopeId, delta) {
+    const env = envelopes.find(function (item) {
+      return item.id === envelopeId;
+    });
+    if (!env) return;
+    env.balance = Number(((Number(env.balance) || 0) + (Number(delta) || 0)).toFixed(2));
+  }
+
+  function renderEnvelopesCards() {
+    if (!envelopes.length) {
+      dom.envelopesCards.innerHTML = '<div style="color:#64748b; font-size:0.88rem;">Aucune enveloppe disponible.</div>';
+      return;
+    }
+
+    const canDeleteAny = envelopes.length > 1;
+
+    dom.envelopesCards.innerHTML = envelopes.map(function (env) {
+      const bal = Number(env.balance) || 0;
+      const color = bal < 0 ? '#dc2626' : '#15803d';
+      const hasOps = operations.some(function (op) { return op.envelopeId === env.id; });
+      const deleteBtnDisabled = !canDeleteAny || hasOps;
+      const deleteTitle = !canDeleteAny
+        ? 'Dernière enveloppe : suppression désactivée'
+        : (hasOps ? 'Enveloppe utilisée par des opérations' : 'Supprimer cette enveloppe');
+
+      return (
+        '<div style="border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; background:#f8fafc; display:flex; flex-direction:column; justify-content:space-between; gap:6px;">' +
+          '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">' +
+            '<span style="font-size:0.84rem; font-weight:600; color:#334155; word-break:break-word;">' +
+              escapeHtml(env.name) +
+            '</span>' +
+            '<button type="button" onclick="ftDeleteEnvelope(\'' + escapeHtml(env.id) + '\')" ' +
+              (deleteBtnDisabled ? 'disabled ' : '') +
+              'title="' + escapeHtml(deleteTitle) + '" ' +
+              'style="border:1px solid ' + (deleteBtnDisabled ? '#e2e8f0' : '#fecaca') + '; background:' + (deleteBtnDisabled ? '#f1f5f9' : '#fef2f2') + '; color:' + (deleteBtnDisabled ? '#94a3b8' : '#b91c1c') + '; border-radius:6px; padding:2px 6px; font-size:0.75rem; cursor:' + (deleteBtnDisabled ? 'not-allowed' : 'pointer') + ';">' +
+              '✕' +
+            '</button>' +
+          '</div>' +
+          '<div style="font-size:1.08rem; font-weight:700; color:' + color + ';">' +
+            formatNumber(bal) +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderEnvelopeSelect() {
+    const preferredId =
+      dom.inputEnvelope.value ||
+      localStorage.getItem(STORAGE_KEYS.lastEnvelopeId) ||
+      (envelopes[0] ? envelopes[0].id : '');
+
+    dom.inputEnvelope.innerHTML = envelopes.map(function (env) {
+      return (
+        '<option value="' + escapeHtml(env.id) + '">' +
+          escapeHtml(env.name) + ' (' + formatNumber(env.balance) + ')' +
+        '</option>'
+      );
+    }).join('');
+
+    if (preferredId && envelopes.some(function (e) { return e.id === preferredId; })) {
+      dom.inputEnvelope.value = preferredId;
+    }
+  }
+
+  // --- Gestion du brouillon ---
+  function clearDraft(keepVoiceMessage) {
+    editingOperationId = null;
+    awaitingNegativeConfirm = false;
+
+    dom.inputType.value = 'expense';
+    dom.inputAmount.value = '';
+    dom.inputWallet.value = 'Espèces';
+    dom.inputLabel.value = '';
+    dom.inputReceipt.value = '';
+    draftAttachment = null;
+    renderAttachmentPreview(null);
+
+    dom.draftBadge.textContent = 'Brouillon : Nouvelle opération';
+    dom.draftBadge.style.background = '#eff6ff';
+    dom.draftBadge.style.color = '#1d4ed8';
+    dom.btnCancelEdit.style.display = 'none';
+
+    renderEnvelopeSelect();
+    hideGuardAlert();
+
+    if (!keepVoiceMessage) {
+      dom.voiceFeedback.textContent = 'Brouillon effacé. Aucune donnée n\'a été enregistrée.';
+    }
+  }
+
+  // --- Enregistrement (création ou mise à jour) avec garde-fous ---
+  function saveOperationFromDraft() {
+    hideGuardAlert();
+
+    const type = dom.inputType.value === 'income' ? 'income' : 'expense';
+    const amount = parseFloat(dom.inputAmount.value);
+    const wallet = dom.inputWallet.value || 'Espèces';
+    const envelopeId = dom.inputEnvelope.value;
+    const rawLabel = String(dom.inputLabel.value || '').trim();
+    const label = rawLabel || (type === 'income' ? 'Revenu' : 'Dépense');
+
+    // Garde-fou 1 : montant strictement positif
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showGuardAlert('Erreur : le montant doit être un nombre supérieur à 0.', true);
+      return;
+    }
+
+    // Garde-fou 2 : enveloppe obligatoire
+    const targetEnvelope = envelopes.find(function (e) { return e.id === envelopeId; });
+    if (!targetEnvelope) {
+      showGuardAlert('Erreur : sélectionne ou crée une enveloppe valide.', true);
+      return;
+    }
+
+    const newDelta = type === 'income' ? amount : -amount;
+    const existingOp = editingOperationId
+      ? operations.find(function (o) { return o.id === editingOperationId; })
+      : null;
+
+    // Calcul du solde projeté de l'enveloppe après opération
+    let projectedBalance = (Number(targetEnvelope.balance) || 0) + newDelta;
+    if (existingOp && existingOp.envelopeId === envelopeId) {
+      const oldDelta = existingOp.type === 'income' ? existingOp.amount : -existingOp.amount;
+      projectedBalance = (Number(targetEnvelope.balance) || 0) - oldDelta + newDelta;
+    }
+
+    // Garde-fou 3 : avertissement non bloquant si une dépense fait passer l'enveloppe en négatif
+    if (type === 'expense' && projectedBalance < 0 && !awaitingNegativeConfirm) {
+      awaitingNegativeConfirm = true;
+      showGuardAlert(
+        'Attention : cette dépense fera passer l\'enveloppe « ' +
+          targetEnvelope.name +
+          ' » à ' +
+          formatNumber(projectedBalance) +
+          '. Clique à nouveau sur « Enregistrer l\'opération » pour confirmer.',
+        false
+      );
+      return;
+    }
+
+    awaitingNegativeConfirm = false;
+
+    if (existingOp) {
+      // Modification : annuler l'ancien impact sur l'ancienne enveloppe, puis appliquer le nouveau
+      const oldDelta = existingOp.type === 'income' ? existingOp.amount : -existingOp.amount;
+      adjustEnvelopeBalance(existingOp.envelopeId, -oldDelta);
+      adjustEnvelopeBalance(envelopeId, newDelta);
+
+      existingOp.type = type;
+      existingOp.amount = amount;
+      existingOp.wallet = wallet;
+      existingOp.envelopeId = envelopeId;
+      existingOp.label = label;
+      existingOp.attachment = draftAttachment;
+      existingOp.updatedAt = new Date().toISOString();
+
+      lastCreatedOperationId = null;
+      dom.voiceFeedback.textContent = 'Opération modifiée et solde des enveloppes recalculé.';
+    } else {
+      // Création : mettre à jour l'enveloppe (+ pour revenu, - pour dépense)
+      adjustEnvelopeBalance(envelopeId, newDelta);
+
+      const newOp = {
+        id: 'op-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        type: type,
+        amount: amount,
+        wallet: wallet,
+        envelopeId: envelopeId,
+        label: label,
+        attachment: draftAttachment,
+        date: new Date().toISOString()
+      };
+
+      operations.unshift(newOp);
+      lastCreatedOperationId = newOp.id;
+      dom.voiceFeedback.textContent =
+        (type === 'income' ? 'Revenu (+' : 'Dépense (-') +
+        formatNumber(amount) +
+        ' • ' + wallet + ') enregistré dans « ' +
+        targetEnvelope.name +
+        ' ».';
+    }
+
+    localStorage.setItem(STORAGE_KEYS.lastEnvelopeId, envelopeId);
+    persistAndRender();
+    clearDraft(true);
+  }
+
+  // --- Annulation rapide de la dernière opération ---
+  function undoLastOperation() {
+    if (!lastCreatedOperationId) return;
+    const idx = operations.findIndex(function (o) { return o.id === lastCreatedOperationId; });
+    if (idx !== -1) {
+      const op = operations[idx];
+      const delta = op.type === 'income' ? op.amount : -op.amount;
+      adjustEnvelopeBalance(op.envelopeId, -delta);
+      operations.splice(idx, 1);
+    }
+    lastCreatedOperationId = null;
+    persistAndRender();
+    dom.voiceFeedback.textContent = 'Dernière opération annulée ; l\'enveloppe a retrouvé son solde précédent.';
+  }
+
+  // --- Édition et suppression depuis l'historique ---
+  window.ftEditOperation = function (opId) {
+    const op = operations.find(function (o) { return o.id === opId; });
+    if (!op) return;
+
+    editingOperationId = op.id;
+    awaitingNegativeConfirm = false;
+    hideGuardAlert();
+
+    dom.inputType.value = op.type;
+    dom.inputAmount.value = op.amount;
+    dom.inputWallet.value = op.wallet || 'Espèces';
+    renderEnvelopeSelect();
+    if (envelopes.some(function (e) { return e.id === op.envelopeId; })) {
+      dom.inputEnvelope.value = op.envelopeId;
+    }
+    dom.inputLabel.value = op.label;
+
+    draftAttachment = op.attachment || null;
+    dom.inputReceipt.value = '';
+    renderAttachmentPreview(draftAttachment);
+
+    dom.draftBadge.textContent = 'Brouillon : Modification en cours';
+    dom.draftBadge.style.background = '#fef3c7';
+    dom.draftBadge.style.color = '#92400e';
+    dom.btnCancelEdit.style.display = 'inline-block';
+    dom.voiceFeedback.textContent = 'Modifie les champs puis clique sur « Enregistrer l\'opération ».';
+  };
+
+  window.ftDeleteOperation = function (opId) {
+    const idx = operations.findIndex(function (o) { return o.id === opId; });
+    if (idx === -1) return;
+
+    const op = operations[idx];
+    // Inverse l'effet de l'opération supprimée sur l'enveloppe
+    const delta = op.type === 'income' ? op.amount : -op.amount;
+    adjustEnvelopeBalance(op.envelopeId, -delta);
+
+    operations.splice(idx, 1);
+    if (lastCreatedOperationId === opId) lastCreatedOperationId = null;
+    if (editingOperationId === opId) clearDraft(true);
+
+    persistAndRender();
+    dom.voiceFeedback.textContent = 'Opération supprimée et solde de l\'enveloppe recalculé.';
+  };
+
+  window.ftOpenOperationReceipt = function (opId) {
+    const op = operations.find(function (o) { return o.id === opId; });
+    if (!op || !op.attachment || !op.attachment.data) return;
+
+    const popup = window.open('', '_blank');
+    if (!popup) {
+      showGuardAlert('Autorise les fenêtres contextuelles (pop-ups) pour afficher le justificatif.', true);
+      return;
+    }
+
+    if (op.attachment.type === 'pdf') {
+      popup.document.write(
+        '<!doctype html><html><head><title>' + escapeHtml(op.attachment.name || 'Justificatif PDF') + '</title></head>' +
+        '<body style="margin:0;height:100vh;"><iframe src="' + op.attachment.data + '" style="width:100%;height:100%;border:0;"></iframe></body></html>'
+      );
+    } else {
+      popup.document.write(
+        '<!doctype html><html><head><title>' + escapeHtml(op.attachment.name || 'Justificatif photo') + '</title></head>' +
+        '<body style="margin:16px;background:#0f172a;display:flex;justify-content:center;align-items:flex-start;">' +
+        '<img src="' + op.attachment.data + '" style="max-width:100%;height:auto;border-radius:8px;" /></body></html>'
+      );
+    }
+    popup.document.close();
+  };
+
+  function renderHistoryList() {
+    if (!operations.length) {
+      dom.historyList.innerHTML = '<div style="font-size:0.86rem; color:#64748b;">Aucune opération enregistrée pour le moment.</div>';
+      return;
+    }
+
+    dom.historyList.innerHTML = operations.slice(0, 25).map(function (op) {
+      const env = envelopes.find(function (e) { return e.id === op.envelopeId; });
+      const envName = env ? env.name : 'Enveloppe supprimée';
+      const walletName = op.wallet || 'Espèces';
+      const isIncome = op.type === 'income';
+      const sign = isIncome ? '+' : '-';
+      const amountColor = isIncome ? '#15803d' : '#dc2626';
+
+      const receiptBtn = op.attachment
+        ? '<button type="button" onclick="ftOpenOperationReceipt(\'' + escapeHtml(op.id) + '\')" style="padding:3px 8px; border:none; border-radius:6px; background:#e2e8f0; color:#0f172a; cursor:pointer; font-size:0.78rem;">📎 Justificatif</button>'
+        : '';
+
+      return (
+        '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:9px 12px; border:1px solid #e2e8f0; border-radius:8px; background:#ffffff;">' +
+          '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+            '<strong style="font-size:0.9rem;">' + escapeHtml(op.label) + '</strong>' +
+            '<span style="font-size:0.8rem; color:#64748b;">• ' + escapeHtml(envName) + ' (' + escapeHtml(walletName) + ')</span>' +
+            receiptBtn +
+          '</div>' +
+          '<div style="display:flex; align-items:center; gap:8px;">' +
+            '<span style="font-weight:700; color:' + amountColor + '; font-size:0.92rem;">' +
+              sign + formatNumber(op.amount) +
+            '</span>' +
+            '<button type="button" onclick="ftEditOperation(\'' + escapeHtml(op.id) + '\')" style="padding:4px 9px; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc; cursor:pointer; font-size:0.8rem;">Éditer</button>' +
+            '<button type="button" onclick="ftDeleteOperation(\'' + escapeHtml(op.id) + '\')" style="padding:4px 9px; border:1px solid #fecaca; border-radius:6px; background:#fef2f2; color:#b91c1c; cursor:pointer; font-size:0.8rem;">Supprimer</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  // --- Saisie vocale intelligente (Type, Montant, Portefeuille, Libellé en brouillon) ---
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+
+  if (SpeechRecognitionCtor) {
+    recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'fr-FR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = function () {
+      dom.btnVoiceStart.style.opacity = '0.7';
+      dom.voiceFeedback.textContent =
+        'Écoute en cours... ex. : « Dépense 4500 carburant mobile money » ou « Revenu 50000 salaire banque ».';
+    };
+
+    recognition.onresult = function (event) {
+      const transcript = event.results[0][0].transcript;
+      dom.voiceFeedback.textContent =
+        'Entendu (brouillon non enregistré) : « ' + transcript + ' » — vérifie puis clique sur Enregistrer.';
+      applyVoiceTranscriptToDraft(transcript);
+    };
+
+    recognition.onerror = function (event) {
+      showGuardAlert('Reconnaissance vocale : ' + event.error, true);
+    };
+
+    recognition.onend = function () {
+      dom.btnVoiceStart.style.opacity = '1';
+    };
+  } else {
+    dom.btnVoiceStart.disabled = true;
+    dom.btnVoiceRetry.disabled = true;
+    dom.voiceFeedback.textContent = 'Saisie vocale non prise en charge sur ce navigateur ; utilise la saisie classique en brouillon.';
+  }
+
+  function applyVoiceTranscriptToDraft(transcript) {
+    const lower = String(transcript || '').toLowerCase();
+
+    // 1. Type : revenu vs dépense
+    const isIncome = /(revenu|entrée|entree|salaire|reçu|recu|vente|gain)/i.test(lower);
+    dom.inputType.value = isIncome ? 'income' : 'expense';
+
+    // 2. Montant (gère les espaces dans les grands nombres comme "15 000")
+    const normalizedNumbers = lower.replace(/\s+(?=\d{3})/g, '');
+    const amountMatch = normalizedNumbers.match(/\d+([.,]\d+)?/);
+    if (amountMatch) {
+      dom.inputAmount.value = amountMatch[0].replace(',', '.');
+    }
+
+    // 3. Portefeuille : Mobile Money, Banque ou Espèces
+    let detectedWallet = 'Espèces';
+    if (/(mobile money|momo|mtn|moov|celtiis|flooz)/i.test(lower)) {
+      detectedWallet = 'Mobile Money';
+    } else if (/(banque|carte|virement|chèque|cheque)/i.test(lower)) {
+      detectedWallet = 'Banque';
+    }
+    dom.inputWallet.value = detectedWallet;
+
+    // 4. Libellé nettoyé (retire mots-clés de type, devise, montant et portefeuille)
+    const cleanedLabel = lower
+      .replace(/(dépense|depense|revenu|entrée|entree|de|pour|par|en|francs|fcfa|euros|dollars)/gi, ' ')
+      .replace(/(mobile money|momo|mtn|moov|celtiis|flooz|banque|carte|virement|chèque|cheque|espèces|especes|cash|liquide)/gi, ' ')
+      .replace(/\d+([.,]\d+)?/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleanedLabel) {
+      dom.inputLabel.value = cleanedLabel.charAt(0).toUpperCase() + cleanedLabel.slice(1);
+    }
+
+    awaitingNegativeConfirm = false;
+    hideGuardAlert();
+  }
+
+  // --- Justificatifs : compression image via Canvas, PDF ≤ 1,5 Mo & retrait du brouillon ---
+  window.ftRemoveDraftAttachment = function () {
+    draftAttachment = null;
+    dom.inputReceipt.value = '';
+    renderAttachmentPreview(null);
+    hideGuardAlert();
+  };
+
+  function renderAttachmentPreview(att) {
+    if (!att || !att.data) {
+      dom.receiptPreviewBox.innerHTML = '';
+      return;
+    }
+
+    const removeBtn =
+      '<button type="button" onclick="ftRemoveDraftAttachment()" ' +
+      'style="margin-left:8px; padding:2px 8px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0f172a; cursor:pointer; font-size:0.78rem;">' +
+      'Retirer</button>';
+
+    if (att.type === 'pdf') {
+      dom.receiptPreviewBox.innerHTML =
+        '<div style="display:flex; align-items:center; flex-wrap:wrap;">' +
+          '<span>📄 PDF joint : <strong>' + escapeHtml(att.name || 'document.pdf') + '</strong></span>' +
+          removeBtn +
+        '</div>';
+    } else {
+      dom.receiptPreviewBox.innerHTML =
+        '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+          '<img src="' + att.data + '" alt="Aperçu justificatif" style="height:46px; width:auto; border-radius:6px; border:1px solid #cbd5e1;" />' +
+          '<span>Photo compressée prête</span>' +
+          removeBtn +
+        '</div>';
+    }
+  }
+
+  function compressImageFile(file, maxWidth, quality) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        const img = new Image();
+        img.onload = function () {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = ev.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  dom.inputReceipt.addEventListener('change', async function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) {
+      draftAttachment = null;
+      renderAttachmentPreview(null);
+      return;
+    }
+
+    hideGuardAlert();
+
+    if (file.type === 'application/pdf') {
+      const maxPdfBytes = 1.5 * 1024 * 1024;
+      if (file.size > maxPdfBytes) {
+        showGuardAlert('Le fichier PDF dépasse 1,5 Mo. Choisis un fichier plus léger pour préserver le stockage local.', true);
+        e.target.value = '';
+        draftAttachment = null;
+        renderAttachmentPreview(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function () {
+        draftAttachment = {
+          name: file.name,
+          type: 'pdf',
+          data: reader.result
+        };
+        renderAttachmentPreview(draftAttachment);
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type && file.type.startsWith('image/')) {
+      try {
+        const compressedDataUrl = await compressImageFile(file, 1000, 0.72);
+        draftAttachment = {
+          name: file.name,
+          type: 'image',
+          data: compressedDataUrl
+        };
+        renderAttachmentPreview(draftAttachment);
+      } catch (_) {
+        showGuardAlert('Impossible de compresser cette image.', true);
+      }
+    } else {
+      showGuardAlert('Format non pris en charge. Choisis une photo (JPG/PNG/WebP) ou un fichier PDF.', true);
+      e.target.value = '';
+    }
+  });
+
+  // --- Branchements des boutons ---
+  dom.btnAddEnv.addEventListener('click', function () {
+    const created = createEnvelope(dom.newEnvName.value, dom.newEnvInitial.value);
+    if (created) {
+      dom.newEnvName.value = '';
+      dom.newEnvInitial.value = '0';
+    }
+  });
+
+  dom.btnVoiceStart.addEventListener('click', function () {
+    if (recognition) {
+      hideGuardAlert();
+      recognition.start();
+    }
+  });
+
+  dom.btnVoiceRetry.addEventListener('click', function () {
+    clearDraft(true);
+    if (recognition) {
+      recognition.start();
+    }
+  });
+
+  dom.btnDraftClear.addEventListener('click', function () {
+    clearDraft(false);
+  });
+
+  dom.btnSaveOperation.addEventListener('click', saveOperationFromDraft);
+  dom.btnCancelEdit.addEventListener('click', function () {
+    clearDraft(false);
+  });
+  dom.btnUndoLastOp.addEventListener('click', undoLastOperation);
+
+  // Réinitialise la demande de double confirmation si l'utilisateur modifie le brouillon
+  [dom.inputType, dom.inputAmount, dom.inputWallet, dom.inputEnvelope].forEach(function (el) {
+    el.addEventListener('input', function () {
+      awaitingNegativeConfirm = false;
+      hideGuardAlert();
+    });
+    el.addEventListener('change', function () {
+      awaitingNegativeConfirm = false;
+      hideGuardAlert();
+    });
+  });
+
+  // --- API globale pour Export / Import JSON complet ---
+  window.FinTrackSmartBackup = {
+    getPayload: function () {
+      return {
+        envelopes: loadJsonArray(STORAGE_KEYS.envelopes),
+        smartOperations: loadJsonArray(STORAGE_KEYS.operations),
+        lastEnvelopeId: localStorage.getItem(STORAGE_KEYS.lastEnvelopeId) || null
+      };
+    },
+    restorePayload: function (payload) {
+      if (!payload || typeof payload !== 'object') return;
+      if (Array.isArray(payload.envelopes)) {
+        localStorage.setItem(STORAGE_KEYS.envelopes, JSON.stringify(payload.envelopes));
+      }
+      if (Array.isArray(payload.smartOperations)) {
+        localStorage.setItem(STORAGE_KEYS.operations, JSON.stringify(payload.smartOperations));
+      }
+      if (payload.lastEnvelopeId) {
+        localStorage.setItem(STORAGE_KEYS.lastEnvelopeId, payload.lastEnvelopeId);
+      }
+      envelopes = loadJsonArray(STORAGE_KEYS.envelopes);
+      if (envelopes.length === 0) {
+        envelopes = [{ id: 'env-default-portefeuille', name: 'Portefeuille', balance: 0 }];
+      }
+      operations = loadJsonArray(STORAGE_KEYS.operations);
+      lastCreatedOperationId = null;
+      clearDraft(false);
+      persistAndRender();
+    },
+    buildFullBackup: function (existingAppData) {
+      return Object.assign({}, existingAppData || {}, {
+        smartModule: this.getPayload(),
+        exportedAt: new Date().toISOString()
+      });
+    },
+    applyFullBackup: function (parsedJson, restoreExistingAppFn) {
+      if (!parsedJson || typeof parsedJson !== 'object') return;
+      if (typeof restoreExistingAppFn === 'function') {
+        restoreExistingAppFn(parsedJson);
+      }
+      const smartPart = parsedJson.smartModule || parsedJson;
+      this.restorePayload(smartPart);
+    },
+    downloadJson: function (existingAppData, filename) {
+      const fullData = this.buildFullBackup(existingAppData);
+      const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || ('fintrack-backup-' + new Date().toISOString().slice(0, 10) + '.json');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    },
+    handleFileImport: function (file, restoreExistingAppFn, onError) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          window.FinTrackSmartBackup.applyFullBackup(parsed, restoreExistingAppFn);
+        } catch (err) {
+          if (typeof onError === 'function') {
+            onError(err);
+          } else {
+            showGuardAlert('Fichier JSON invalide ou corrompu.', true);
+          }
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  // --- Initialisation au chargement de la page ---
+  persistAndRender();
+})();
+</script>
